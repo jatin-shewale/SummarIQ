@@ -1,11 +1,12 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import FileUpload from "../components/FileUpload";
 import TextInput from "../components/TextInput";
 import SummaryOutput from "../components/SummaryOutput";
 import { AiOutlineRobot, AiOutlineFileText, AiOutlineBulb } from "react-icons/ai";
-import { FaSparkles, FaRocket, FaShieldAlt } from "react-icons/fa";
+import { FaSparkles, FaRocket, FaShieldAlt, FaExclamationTriangle } from "react-icons/fa";
 import { motion } from "framer-motion";
 import { toast } from 'react-toastify';
+import { apiService } from '../services/api';
 
 export default function Home() {
   const [pdfFile, setPdfFile] = useState(null);
@@ -13,8 +14,30 @@ export default function Home() {
   const [summary, setSummary] = useState("");
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("upload"); // "upload" or "text"
+  const [backendStatus, setBackendStatus] = useState({ connected: null, checking: true });
+
+  // Check backend connection on component mount
+  useEffect(() => {
+    checkBackendConnection();
+  }, []);
+
+  const checkBackendConnection = async () => {
+    setBackendStatus({ connected: null, checking: true });
+    try {
+      const result = await apiService.testConnection();
+      setBackendStatus({ connected: result.success, checking: false });
+      
+      if (!result.success) {
+        toast.error(result.message);
+      }
+    } catch (error) {
+      setBackendStatus({ connected: false, checking: false });
+      toast.error("Could not connect to backend server");
+    }
+  };
 
   const handleSummarize = async () => {
+    // Validation
     if (activeTab === "upload" && !pdfFile) {
       toast.error("Please upload a PDF file first!");
       return;
@@ -24,25 +47,58 @@ export default function Home() {
       return;
     }
 
+    // Check backend connection first
+    if (!backendStatus.connected) {
+      toast.error("Backend server is not available. Please check if it's running.");
+      return;
+    }
+
     setLoading(true);
-    toast.info("Processing your content...");
+    setSummary(""); // Clear previous summary
+    toast.info("Processing your content with AI...");
     
-    // Simulate API call
-    setTimeout(() => {
-      setSummary(`✨ **AI-Generated Summary**
-
-This is a comprehensive summary of your ${activeTab === "upload" ? "PDF document" : "text content"}. The AI has analyzed the key themes, main arguments, and important details to provide you with this concise overview.
-
-**Key Points:**
-• Main concept and central thesis
-• Supporting arguments and evidence
-• Important conclusions and insights
-• Actionable recommendations
-
-The summary captures the essence of your content while maintaining clarity and coherence. ${extraText ? "Your additional notes have been incorporated into the analysis." : ""}`);
+    try {
+      let result;
+      
+      if (activeTab === "upload") {
+        // PDF summarization
+        result = await apiService.summarizePDF(pdfFile, extraText);
+        toast.success(`PDF "${pdfFile.name}" summarized successfully!`);
+      } else {
+        // Text summarization
+        result = await apiService.summarizeText(extraText);
+        toast.success("Text summarized successfully!");
+      }
+      
+      // Format the summary for better display
+      const formattedSummary = formatApiSummary(result);
+      setSummary(formattedSummary);
+      
+    } catch (error) {
+      console.error('Summarization error:', error);
+      toast.error(error.message || "Failed to generate summary. Please try again.");
+      setSummary(""); // Clear any partial summary
+    } finally {
       setLoading(false);
-      toast.success("Summary generated successfully!");
-    }, 3000);
+    }
+  };
+
+  const formatApiSummary = (result) => {
+    // Format the API response into a nice display format
+    let formattedText = `**${result.title}**\n\n`;
+    formattedText += result.summary;
+    
+    // Add metadata at the end
+    formattedText += `\n\n---\n\n`;
+    formattedText += `**Summary Details:**\n`;
+    formattedText += `• Word Count: ${result.word_count.toLocaleString()} words\n`;
+    formattedText += `• Processing Time: ${result.processing_time.toFixed(2)} seconds\n`;
+    if (result.original_filename) {
+      formattedText += `• Source File: ${result.original_filename}\n`;
+    }
+    formattedText += `• Saved: ${result.saved_path}`;
+    
+    return formattedText;
   };
 
   const features = [
@@ -65,6 +121,31 @@ The summary captures the essence of your content while maintaining clarity and c
 
   return (
     <div className="min-h-screen">
+      {/* Backend Status Banner */}
+      {!backendStatus.checking && !backendStatus.connected && (
+        <motion.div
+          initial={{ y: -50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="bg-red-50 border-l-4 border-red-400 p-4 mb-4"
+        >
+          <div className="flex items-center max-w-6xl mx-auto">
+            <FaExclamationTriangle className="text-red-400 mr-3" />
+            <div>
+              <p className="text-red-700 font-medium">Backend Server Not Connected</p>
+              <p className="text-red-600 text-sm">
+                Please start the backend server on port 8000. 
+                <button 
+                  onClick={checkBackendConnection}
+                  className="ml-2 underline hover:no-underline"
+                >
+                  Retry Connection
+                </button>
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
       {/* Hero Section */}
       <section className="relative px-4 py-20 text-center">
         <div className="max-w-6xl mx-auto">
@@ -156,6 +237,31 @@ The summary captures the essence of your content while maintaining clarity and c
               <p className="text-gray-600 text-lg">
                 Choose your preferred method to analyze your content
               </p>
+              
+              {/* Backend Status Indicator */}
+              <div className="mt-4 flex justify-center">
+                <div className={`
+                  flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium
+                  ${backendStatus.checking 
+                    ? 'bg-yellow-100 text-yellow-700' 
+                    : backendStatus.connected 
+                      ? 'bg-green-100 text-green-700' 
+                      : 'bg-red-100 text-red-700'
+                  }
+                `}>
+                  <div className={`
+                    w-2 h-2 rounded-full
+                    ${backendStatus.checking 
+                      ? 'bg-yellow-500 animate-pulse' 
+                      : backendStatus.connected 
+                        ? 'bg-green-500' 
+                        : 'bg-red-500'
+                    }
+                  `}></div>
+                  {backendStatus.checking ? 'Checking...' : 
+                   backendStatus.connected ? 'Backend Connected' : 'Backend Offline'}
+                </div>
+              </div>
             </div>
 
             {/* Tab Navigation */}
@@ -227,10 +333,10 @@ The summary captures the essence of your content while maintaining clarity and c
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={handleSummarize}
-                  disabled={loading}
+                  disabled={loading || !backendStatus.connected}
                   className={`
                     px-8 py-4 rounded-2xl font-bold text-lg transition-all duration-300 shadow-lg
-                    ${loading 
+                    ${loading || !backendStatus.connected
                       ? "bg-gray-400 cursor-not-allowed" 
                       : "bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 text-white hover:shadow-xl"
                     }
@@ -239,7 +345,12 @@ The summary captures the essence of your content while maintaining clarity and c
                   {loading ? (
                     <div className="flex items-center gap-3">
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                      Processing...
+                      Processing with AI...
+                    </div>
+                  ) : !backendStatus.connected ? (
+                    <div className="flex items-center gap-2">
+                      <FaExclamationTriangle />
+                      Backend Offline
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
