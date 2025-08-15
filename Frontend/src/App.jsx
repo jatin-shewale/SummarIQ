@@ -5,7 +5,7 @@ import 'react-toastify/dist/ReactToastify.css';
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <Home />
       <ToastContainer
         position="top-right"
@@ -18,6 +18,9 @@ export default function App() {
         draggable
         pauseOnHover
         theme="light"
+        toastClassName="rounded-xl shadow-lg"
+        bodyClassName="font-medium"
+        progressClassName="bg-gradient-to-r from-purple-500 to-blue-600"
       />
     </div>
   );

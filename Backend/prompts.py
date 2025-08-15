@@ -1,4 +1,4 @@
-from schema import BookSummary
+from Backend.schema import BookSummary
 
 SYSTEM_PROMPT = """
 You are SummarIQ, an expert book summarizer.
